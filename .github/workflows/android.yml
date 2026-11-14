@@ -1,5 +1,5 @@
 
-name: NovaTV Ultra Android Build
+name: NovaTV Ultra Build
 
 on:
   workflow_dispatch:
@@ -12,10 +12,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Find project ZIP
+        run: |
+          ZIP=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "Project ZIP not found"
+            exit 1
+          fi
+          mkdir -p project
+          unzip -q "$ZIP" -d project
+
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -24,38 +34,23 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Locate and extract project
-        run: |
-          ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' | head -n 1)
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Project ZIP not found"
-            exit 1
-          fi
-
-          mkdir -p project
-          unzip -q "$ZIP_FILE" -d project
-
-      - name: Locate Gradle project
+      - name: Find Gradle project
         id: locate
         run: |
-          SETTINGS=$(find project -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1)
-
+          SETTINGS=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -n 1)
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Gradle settings file not found"
+            echo "Gradle settings file not found"
             exit 1
           fi
-
           echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Gradle
+      - name: Build APK
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Build Debug APK
-        run: |
-          gradle -p "${{ steps.locate.outputs.dir }}" assembleDebug --stacktrace
+      - name: Compile APK
+        run: gradle -p "${{ steps.locate.outputs.dir }}" assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
