@@ -1,51 +1,52 @@
-name: Build NovaTV Ultra APK
+
+name: NovaTV Ultra APK Build
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
+      - name: Find project ZIP
+        run: |
+          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Project ZIP not found"
+            exit 1
+          fi
+          mkdir project
+          unzip -q "$ZIP_FILE" -d project
 
-      - name: Set up Gradle
+      - name: Find Android project
+        id: project
+        run: |
+          SETTINGS=$(find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: Gradle settings file missing"
+            exit 1
+          fi
+          echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Extract Android project
-        run: |
-          mkdir extracted
-          ZIP_FILE=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
-          if [ -z "$ZIP_FILE" ]; then
-            echo "Project ZIP not found in repository root"
-            exit 1
-          fi
-          unzip -q "$ZIP_FILE" -d extracted
+      - name: Compile APK
+        run: gradle -p "${{ steps.project.outputs.dir }}" assembleDebug
 
-      - name: Build APK
-        run: |
-          SETTINGS=$(find extracted -type f \( -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -n 1)
-          if [ -z "$SETTINGS" ]; then
-            echo "Gradle settings file not found"
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$SETTINGS")
-          gradle -p "$PROJECT_DIR" assembleDebug --stacktrace
-
-      - name: Upload APK
+      - name: Save APK
         uses: actions/upload-artifact@v4
         with:
           name: NovaTV-Ultra-APK
-          path: extracted/**/build/outputs/apk/debug/*.apk
+          path: project/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          
